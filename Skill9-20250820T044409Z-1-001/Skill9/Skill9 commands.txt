@@ -1,0 +1,248 @@
+Dockerfile---> Single Container
+
+What is Docker Compose?
+--------------------------
+Docker Compose is a tool that lets you define and run multi-container Docker applications with a single command.
+Instead of typing a long docker run command for every container, we describe everything in a simple docker-compose.yml file.
+
+Why use it?
+----------------
+1. Easier Multi-Container Setup
+	Most real apps need more than one container:
+	-A Spring Boot backend 
+	-A MySQL database 
+	-A React frontend
+
+	Without Compose run commands:
+		docker run mysql:8.0 ... long list of env vars ...
+		docker run my-springboot-app ... more flags ...
+		docker network connect ...
+
+	With Compose:
+		docker compose up
+
+
+2. Everything in One File
+
+	Container images to use (or build)
+	Environment variables
+	Ports
+	Networks
+	Volumes (if needed)
+	Startup order
+
+3. Networking is Automatic
+	All containers in a Compose project are placed in the same private Docker network.
+	we don’t need to manually configure IPs or hostnames.
+	we can just say jdbc:mysql://db:3306 — db is the service name.
+
+4.One Command to Control All
+	Start: docker compose up
+	Stop: docker compose down
+	Rebuild: docker compose up --build
+	View logs: docker compose logs -f
+
+5. Environment Specific Config
+	we can have different docker-compose.override.yml for development, testing, production.
+	we can swap MySQL for PostgreSQL or swap local DB for cloud DB easily.
+
+
+Example: e-commerce backend case:
+
+Without Compose, need to run MySQL and Spring Boot in separate docker run commands and manually link them.
+With Compose, we write the services in one docker-compose.yml, run docker compose up, and both containers come up, connected, with DB ready before your backend starts.
+
+
+What is a Docker Network?
+-------------------------
+
+	A Docker network is like a private LAN (local network) created inside Docker.
+	Containers attached to the same network can talk to each other by container name (service name in Compose) instead of IP.
+	Example: In your docker-compose.yml, the backend connects to the db using jdbc:mysql://db:3306/ecommerce.
+	Here, db is not an IP—it’s the service name that Docker resolves automatically.
+
+Types of Networks
+-----------------
+	Docker has several network drivers:
+
+	1. bridge (default)
+		Each container gets an internal IP.
+		Containers can talk to each other if on the same bridge.
+		Good for simple local development.
+
+	2. host
+		The container shares the host’s network stack.
+		No port mapping needed.
+		Works only on Linux (not Docker Desktop on Windows/Mac).
+
+	3. overlay
+		Used in Docker Swarm / Kubernetes.
+		Allows containers running on different hosts to communicate.
+
+	4. none: Isolates the container (no networking).
+
+
+Inspecting Networks
+-------------------
+	List available networks:
+		docker network ls
+	Inspect details of a network:
+		docker network inspect backend_default
+
+Connecting Containers to a Network
+-----------------------------------
+	Create a custom network:
+		docker network create mynet
+	Run two containers on it:
+		docker run -dit --name c1 --network mynet alpine sh
+		docker run -dit --name c2 --network mynet alpine sh
+	Check communication:
+		docker exec -it c1 ping c2
+
+Networks with Docker Compose
+-----------------------------
+
+	docker-compose.yml, Compose automatically creates one network (like backend_default).
+	All services (db, backend, frontend) are connected to it unless you override.
+
+multiple network sexample (e.g., DB private, frontend public):
+
+services:
+  db:
+    image: mysql:8.0
+    networks:
+      - backend_net
+
+  backend:
+    build: ./backend
+    networks:
+      - backend_net
+      - frontend_net
+
+  frontend:
+    build: ./frontend
+    networks:
+      - frontend_net
+
+networks:
+  backend_net:
+  frontend_net:
+
+
+	Docker networks let containers talk by name.
+	Compose auto-creates a network (<project>_default).
+	we can create multiple networks for isolation and security.
+	Always use service names (e.g., db, backend) instead of IP addresses.
+
+
+Docker Network Diagram Explanation
+-----------------------------------
+
+Frontend (Nginx + React)
+	Runs in its own container. It serves the static files and makes HTTP API calls to the backend.
+	Talks to the backend via the service name backend on the Docker network.
+
+Backend (Spring Boot)
+	Runs inside another container. It listens on port 8081.
+	Accepts API requests from the frontend.
+	Connects to MySQL using the JDBC URL jdbc:mysql://db:3306/ecommerce.
+
+Database (MySQL)
+	Runs in its own container with persistent storage via a volume.
+	Listens on port 3306.
+	Accessible to the backend using the service name db.
+
+Docker Network Flow
+-------------------
+
+Frontend → Backend 
+	Communication: http://backend:8081/api/...
+	Protocol: HTTP
+
+Backend → Database
+	Communication: jdbc:mysql://db:3306/ecommerce
+	Protocol: JDBC (SQL over TCP)
+
+All three are on the same Docker bridge network (<project>_default), so they can resolve each other by service name instead of IP.
+
+
+
+Containeraize backed application without volume2
+-----------------------------------------------
+GIT CICD ---> Springboot application --> jar
+Jenkins ---> Springboot application --> war
+Docker --> Springboot application --> jar
+
+Step1: Create Docker File(Dockerfile)
+
+
+Step2: Create Docker Compose file with DB Cluster (docker-compose.yml)
+
+Step3: run docker compose
+
+docker compose up -d --build
+docker compose logs -f backend (if you want exit press ctrl+C )
+docker compose down (if you want to delete containers)
+
+Step4: check output (localhost:8081/api/prodcuts)
+
+Step5: Connect to MySql Container to execute queries
+
+1. Use the MySQL client inside the container
+
+Run an interactive shell into the DB container:
+
+	docker exec -it ecommerce-db mysql -uroot -proot
+	-This will drop you into the MySQL shell. Then you can run SQL:
+		SHOW DATABASES;
+		USE ecommerce;
+		SHOW TABLES;
+
+-- Insert Computers
+INSERT INTO products (name, category, price, image_path) VALUES
+('Gaming PC', 'computers', 1200.00, 'gaming_pc.jpeg'),
+('Office Desktop', 'computers', 800.00, 'office_desktop.jpeg'),
+('Mini PC', 'computers', 500.00, 'mini_pc.jpeg'),
+('Workstation', 'computers', 2500.00, 'workstation.jpeg');
+
+-- Insert Mobiles
+INSERT INTO products (name, category, price, image_path) VALUES
+('iPhone 14', 'mobiles', 999.00, 'iphone_14.jpeg'),
+('Samsung Galaxy S23', 'mobiles', 899.00, 'samsung_galaxy_s23.jpeg'),
+('Google Pixel 7', 'mobiles', 799.00, 'google_pixel_7.jpeg'),
+('OnePlus 11', 'mobiles', 749.00, 'oneplus_11.jpeg');
+
+-- Insert Laptops
+INSERT INTO products (name, category, price, image_path) VALUES
+('MacBook Air', 'laptops', 1099.00, 'macbook_air.jpeg'),
+('Dell XPS 15', 'laptops', 1299.00, 'dell_xps_15.jpeg'),
+('Lenovo ThinkPad', 'laptops', 999.00, 'lenovo_thinkpad.jpeg'),
+('HP Spectre x360', 'laptops', 1199.00, 'hp_spectre_x360.jpeg');
+
+-- Insert Pendrives
+INSERT INTO products (name, category, price, image_path) VALUES
+('SanDisk 64GB', 'pendrives', 15.00, 'sandisk_64gb.jpeg'),
+('Kingston 128GB', 'pendrives', 25.00, 'kingston_128gb.jpeg'),
+('Sony 256GB', 'pendrives', 50.00, 'sony_256gb.jpeg'),
+('Samsung 512GB', 'pendrives', 80.00, 'samsung_512gb.jpeg');
+
+Select * from prodcuts;
+
+
+You don’t have to enter the shell. You can execute inline queries:
+
+docker exec -it ecommerce-db mysql -uroot -proot -e "SHOW DATABASES;"
+docker exec -it ecommerce-db mysql -uroot -proot -e "USE ecommerce; SHOW TABLES;"
+docker exec -it ecommerce-db mysql -uroot -proot -e "SELECT * FROM ecommerce.products;"
+
+
+Exit with:
+exit;
+
+Finally check localhost:8081/api/products
+
+
+
+
+
+
